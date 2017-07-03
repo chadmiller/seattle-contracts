@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+# Copyright 2017 Chad Miller, CC-by
+# vi: set expandtab tabstop=4 shiftwidth=4 :
+
+from urllib.request import urlopen, urlretrieve
+from urllib.parse import urljoin
+import urllib.error
+import re
+import subprocess
+import shutil
+import csv
+import os
+import time
+import json
+
+os.makedirs("cache", exist_ok=True)
+
+index_urls = ["http://web6.seattle.gov/FAS/SummitPan/R296/R296.Result.aspx?PoStatus=1&SearchType=7&SearchTerm="]
+
+for index_url in index_urls:
+    index_page = urlopen(index_url).read().decode("UTF-8")
+    for i, page_table_row in enumerate(re.findall(r"""<tr(?: class="Alt")?>\s*<td class="T">\s*<a id="grdvPoList_ctl\d+_hlnkPO" href="([^"]+)">(\w+)</a>\s*</td><td>(\w+)</td><td class="T">\s*<a id="grdvPoList_ctl\d+_hlnkName" href="([^"]+)">(.*?)</a>\s*</td><td>(.*?)</td><td align="\w+">(\d\d?/\d\d?/\d\d\d\d)</td><td align="\w+">(\d\d?/\d\d?/\d\d\d\d)</td><td class="T" align="\w+">(.*?)</td>\s*</tr>""", index_page)):
+
+        attachments_index_url_frag, contract_id, vendor_id, _, vendor_name, contract_status, begin_date, renewal_date, description = page_table_row
+
+
+        cache_dir = os.path.join("cache", re.sub("\W+", "", contract_id))
+
+        attachments_index_url = urljoin(index_url, attachments_index_url_frag)
+
+        if not os.path.exists(cache_dir):
+
+            print("Con {0}".format(contract_id,))
+            attachments_page = urlopen(attachments_index_url).read().decode("UTF-8")
+            
+            if "No Attachment Data Exists for the requested Contract Number" in attachments_page:
+                os.makedirs(cache_dir)
+                # Nothing to do! Aiee!
+                continue
+
+            attachments_urls = re.findall(r"""<tr(?: class="Alt")?>\s*<td class="T">\s*<a id="grdvAttachList_ctl\d+_hlnkContract" href="([^"]+)" target="_blank">(.*?)</a>\s*</td>\s*</tr>""", attachments_page)
+
+            if not attachments_urls:
+                print(attachments_page)
+                break
+
+            if os.path.exists(os.path.join("cache", "temp")):
+                shutil.rmtree(os.path.join("cache", "temp"))
+
+            os.makedirs(os.path.join("cache", "temp"))
+
+            for attachment_url, attachment_name in attachments_urls:
+                time.sleep(0.75)
+                print("  Att {0}".format(attachment_name))
+
+                def progress(n, bs, ts):
+                    print("\r    downloaded {0:2.0f}%".format(n*bs*100/ts), end="\r")
+
+                try:
+                    urlretrieve(attachment_url, filename=os.path.join("cache", "temp", "dl-"+ re.sub(r"\W+", "", attachment_url).strip()), reporthook=progress)
+                except urllib.error.HTTPError as exc:
+                    with open(os.path.join("cache", "temp", "+errors"), "a") as f:
+                        f.write(str(exc) + "\n" + attachment_url + "\n" + attachment_name + "\n\n")
+                    
+
+            os.rename(os.path.join("cache", "temp"), cache_dir)
+
+
+        with open(os.path.join(cache_dir, "index_info.json"), "w") as out:
+            json.dump({"contract_id": contract_id, "vendor_name": vendor_name, "vendor_id": vendor_id, "link": attachments_index_url}, out)
+
+
+

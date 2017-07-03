@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+# Copyright 2017 Chad Miller, CC-by
+# vi: set expandtab tabstop=4 shiftwidth=4 :
+
+import csv
+import json
+import os
+import sys
+
+csv_name = sys.argv[1]
+
+with open(csv_name) as csvin:
+    reader = csv.reader(csvin)
+    with open('Rewritten ' + csv_name, 'w') as csvout:
+        writer = csv.writer(csvout)
+
+        for row in reader:
+            try:
+                row_id = "{0:010d}".format(int(row[0]))
+            except ValueError:
+                row_id = row[0]
+
+            info_file = os.path.join("cache", row_id, "extracted_info.json")
+
+            row.append(None)
+            row.append(None)
+            row[13] = "FALSE"
+            row[14] = "FALSE"
+            if os.path.exists(info_file):
+                with open(info_file) as json_file:
+                    info = json.load(json_file)
+                    row[7] = info.get("buyer")
+                    row[8] = info.get("vendor_name")
+                    row[9] = info.get("purpose")
+                    row[11] = info.get("deptagency")
+                    row[11] = info.get("deptagency")
+                    row[12] = info.get("link")
+                    row[13] = "TRUE"
+            
+            writer.writerow(row)

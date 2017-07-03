@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+# Copyright 2017 Chad Miller, CC-by
+# vi: set expandtab tabstop=4 shiftwidth=4 :
+
+import subprocess
+import sys
+import re
+import os
+import json
+
+def extract(dirname):
+
+	subject_files = [os.path.join(dirname, name) for name in os.listdir(dirname) if not name.endswith(".json")]
+	subject_files.sort(reverse=True)
+
+	for filename in subject_files:
+		extr = subprocess.Popen(["unoconv", "--format=txt", "--stdout", filename], stdout=subprocess.PIPE)
+		doc = extr.stdout.read().decode("UTF-8").strip().replace("\ufeff", "")
+
+		# buyer, vendor, purpose, amount, deptagency
+		regexes = [
+			r"""
+^\s*Contract\sTitle\s?:?\s* (?P<purpose>\w[^\n]+) .*?
+^(?:City\s)?(?:Procurement\sStrategic\sAdvisor|Buyer/?)(?:\s*Name)?:?\s*
+(?P<buyer>\w[^\n]*?)$ .*?
+(^(?:For\sUse\sBy:\s|For\sthe\s)?(?P<deptagency0>[^\n]+?)(?:\sONLY|\sUse\sOnly)?\n{1,2}^Order\sLimit|This\scontract\sis\sfor\sthe\ssole\suse\sof\sthe\s(?P<deptagency1>.*?\sDepartment))
+"""
+,
+#			r"""
+#^\s*Contract\sTitle\s?:?\s* (?P<purpose>\w[^\n]+) .*?
+#^(?:City\s)?(?:Procurement\sStrategic\sAdvisor|Buyer)(?:\s*Name)?:\s*
+#(?P<buyer>\w[^\n]*?)$ .*?
+#"""
+
+		]
+
+		for regex in regexes:
+			m = re.search(regex, doc, re.DOTALL|re.VERBOSE|re.MULTILINE)
+			if m:
+				md = m.groupdict()
+
+				with open(os.path.join(dirname, "index_info.json"), "r") as in_file:
+					loaded = json.load(in_file)
+
+				with open(os.path.join(dirname, "extracted_info.json"), "w") as out_file:
+					loaded["buyer"] = md["buyer"].strip()
+					loaded["purpose"] = md["purpose"].strip()
+					if md.get("amount"): loaded["amount"] = md["amount"].strip()
+					if md.get("deptagency0"): loaded["deptagency"] = md["deptagency0"].strip()
+					if md.get("deptagency1"): loaded["deptagency"] = md["deptagency1"].strip()
+
+					json.dump(loaded, out_file)
+
+				return list(sorted(loaded.items()))
+
+				
+		print(repr(doc))
+		print(doc)
+		raise ValueError(filename)
+
+
+if __name__ == "__main__":
+	f = sys.argv[1]
+	print(extract(f), f)

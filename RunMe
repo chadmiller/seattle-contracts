@@ -1,0 +1,16 @@
+#!/bin/bash
+
+which apt-get >/dev/null || echo "## This probably only works on an Ubuntu or Ubuntu-like OS."
+
+which unoconv >/dev/null || { echo "## You need to install 'unoconv' from LibreOffice so we can read MSFT Word docs."; exit 1; }
+which timeout >/dev/null || { echo "## You need to install 'coreutils' package to get 'timeout' program."; exit 1; }
+
+test -f "Seattle Vendor Contracts - Sheet1.csv" || { echo "## Please go to https://bit.ly/2sSBR3Y and File/Export/asCSV the first sheet."; exit 1; }
+
+bin/downloader
+for d in cache/*; do 
+	test -f $d/extracted_info.json && continue
+	bin/extractor $d
+	sleep 1 || break
+done
+bin/csv-rewriter "Seattle Vendor Contracts - Sheet1.csv"
